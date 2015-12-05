@@ -41,7 +41,8 @@ if sys.version_info[0] > 2:
 else:
     from cookielib import LWPCookieJar
     from urllib import quote_plus
-    from urllib2 import Request, urlopen
+    import urllib2
+    from urllib2 import Request, urlopen, ProxyHandler
     from urlparse import urlparse, parse_qs
 
 # Lazy import of BeautifulSoup.
@@ -68,7 +69,7 @@ except Exception:
 
 
 # Request the given URL and return the response page, using the cookie jar.
-def get_page(url):
+def get_page(url,ip,conn_type):
     """
     Request the given URL and return the response page, using the cookie jar.
 
@@ -86,6 +87,12 @@ def get_page(url):
     request.add_header('User-Agent',
                        'Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.0)')
     cookie_jar.add_cookie_header(request)
+
+    if ip != None and conn_type != None:
+        proxy = urllib2.ProxyHandler({conn_type:ip})
+        opener = urllib2.build_opener(proxy)
+        urllib2.install_opener(opener)
+
     response = urlopen(request)
     cookie_jar.extract_cookies(response, request)
     html = response.read()
@@ -160,7 +167,7 @@ def search_apps(query, tld='com', lang='en', tbs='0', safe='off', num=10, start=
 
 # Returns a generator that yields URLs.
 def search(query, tld='com', lang='en', tbs='0', safe='off', num=10, start=0,
-           stop=None, pause=2.0, only_standard=False, extra_params={}, tpe=''):
+           stop=None, pause=2.0, only_standard=False, extra_params={}, tpe='',ip='',conn_type=''):
     """
     Search the given query string using Google.
 
@@ -241,7 +248,7 @@ def search(query, tld='com', lang='en', tbs='0', safe='off', num=10, start=0,
             )
 
     # Grab the cookie from the home page.
-    get_page(url_home % vars())
+    get_page(url_home % vars(),ip,conn_type)
 
     # Prepare the URL of the first request.
     if start:
@@ -258,22 +265,18 @@ def search(query, tld='com', lang='en', tbs='0', safe='off', num=10, start=0,
     # Loop until we reach the maximum result, if any (otherwise, loop forever).
     while not stop or start < stop:
 
-        try:  # Is it python<3?
-            iter_extra_params = extra_params.iteritems()
-        except AttributeError:  # Or python>3?
-            iter_extra_params = extra_params.items()
         # Append extra GET_parameters to URL
-        for k, v in iter_extra_params:
+        for k, v in extra_params.iteritems():
             url += url + ('&%s=%s' % (k, v))
 
         # Sleep between requests.
         time.sleep(pause)
 
         # Request the Google Search results page.
-        html = get_page(url)
+        html = get_page(url,ip,conn_type)
 
         # Parse the response and process every anchored URL.
-        soup = BeautifulSoup(html)
+        soup = BeautifulSoup(html,'lxml')
         anchors = soup.find(id='search').findAll('a')
         for a in anchors:
 
